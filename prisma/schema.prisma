@@ -1,0 +1,183 @@
+// Prisma schema for Tamil Spice Bazaar
+// DB: SQLite for development
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// enum Role {
+//   USER
+//   ADMIN
+// }
+
+// enum OrderStatus {
+//   PENDING
+//   CONFIRMED
+//   PACKED
+//   SHIPPED
+//   DELIVERED
+//   CANCELLED
+// }
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          String    @default("USER")
+  accounts      Account[]
+  sessions      Session[]
+  addresses     Address[]
+  orders        Order[]
+  affiliate     Affiliate?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([createdAt], name: "idx_user_createdAt")
+  @@index([role, createdAt], name: "idx_user_role_createdAt")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Address {
+  id          String  @id @default(cuid())
+  user        User    @relation(fields: [userId], references: [id])
+  userId      String
+  name        String
+  line1       String
+  line2       String?
+  city        String
+  state       String
+  postalCode  String
+  country     String
+  phone       String
+}
+
+model Product {
+  id                  String   @id @default(cuid())
+  slug                String   @unique
+  name                String
+  description         String
+  price               Int      // stored in paise (e.g., 29900 = ₹299)
+  stock               Int      @default(0)
+  category            String?
+  tags                String?  @default("[]") // JSON string array
+  images              String?  @default("[]") // JSON string array of URLs
+  affiliateCommission Int      @default(0) // percent (0-100)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  orderItems          OrderItem[]
+}
+
+model Order {
+  id               String       @id @default(cuid())
+  user             User?        @relation(fields: [userId], references: [id])
+  userId           String?
+  affiliate        Affiliate?   @relation(fields: [affiliateId], references: [id])
+  affiliateId      String?
+  items            OrderItem[]
+  total            Int          // paise
+  status           String       @default("PENDING")
+  shippingAddress  String
+  paymentId        String?
+  razorpayOrderId  String?
+  paidOut          Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([createdAt], name: "idx_order_createdAt")
+  @@index([status], name: "idx_order_status")
+  @@index([status, createdAt], name: "idx_order_status_createdAt")
+  @@index([affiliateId, createdAt], name: "idx_order_affiliate_createdAt")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   String
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+  quantity  Int
+  price     Int // snapshot of unit price in paise
+
+  @@index([productId], name: "idx_orderitem_productId")
+}
+
+model Affiliate {
+  id              String            @id @default(cuid())
+  user            User              @relation(fields: [userId], references: [id])
+  userId          String            @unique
+  promoCode       String            @unique
+  commissionRate  Float             @default(10.0)
+  totalEarnings   Int               @default(0)
+  clicks          AffiliateClick[]
+  orders          Order[]
+  payouts         AffiliatePayout[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model AffiliateClick {
+  id          String    @id @default(cuid())
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id])
+  affiliateId String
+  createdAt   DateTime  @default(now())
+}
+
+model AffiliatePayout {
+  id          String    @id @default(cuid())
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id])
+  affiliateId String
+  amount      Int       // amount in paise
+  status      String    @default("PENDING") // PENDING, COMPLETED, FAILED
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
